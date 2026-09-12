@@ -181,7 +181,26 @@ router.delete("/:id", authenticate, requirePermission("drivers.delete"), control
 */
 router.put("/:id/availability", authenticate, requirePermission("drivers.availability"), controller.availability);
 
-
-//router.get("/:id/location", authenticate, requirePermission("drivers.location"), controller.getDriverLocation);
+/**
+* @swagger
+* /drivers/{id}/location:
+*   delete:
+*     description: Gert driver location
+*     tags:
+*       - Users
+*     produces:
+*       - application/json
+*     parameters:
+*       - name: id
+*         in: path
+*         required: true
+*         description: The ID of the driver to delete
+*         schema:
+*           type: string
+*     responses:
+*       200:
+*         description: Used by the admin dashboard.
+*/
+router.get("/:id/location", authenticate, requirePermission("drivers.location"), controller.location);
 
 module.exports = router;

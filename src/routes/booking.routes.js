@@ -173,7 +173,7 @@ router.post("/", authenticate, requirePermission("bookings.create"), controller.
 router.put("/:id", authenticate, requirePermission("bookings.update"), controller.update);
 
 
-//router.delete("/:id", authenticate, requirePermission("bookings.delete"), controller.remove);
+router.delete("/:id", authenticate, requirePermission("bookings.delete"), controller.remove);
 
 /**
 * @swagger
@@ -240,9 +240,9 @@ router.post("/:id/assign-driver", authenticate, requirePermission("bookings.assi
 router.post("/:id/status", authenticate, requirePermission("bookings.status"), controller.status);
 
 
-//router.post("/:id/cancel", authenticate, requirePermission("bookings.cancel"), controller.cancelBooking);
+router.post("/:id/cancel", authenticate, requirePermission("bookings.cancel"), controller.cancel);
 
 
-//router.put("/:id/commission", authenticate, requirePermission("bookings.commission"), controller.updateBookingCommission);
+router.put("/:id/commission", authenticate, requirePermission("bookings.commission"), controller.updateBookingCommission);
 
 module.exports = router;

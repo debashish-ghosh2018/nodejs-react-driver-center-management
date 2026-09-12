@@ -31,6 +31,7 @@ class Booking extends Model {
       driverCommissionType: { type: DataTypes.ENUM("PERCENTAGE", "FIXED"), allowNull: false, defaultValue: "PERCENTAGE" },
       driverCommissionRate: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
       driverCommissionAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+      driverCommissionIncludeAllowances: {type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false},
       driverNetEarning: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
       status: { type: DataTypes.ENUM("PENDING", "CONFIRMED", "ASSIGNED", "ACCEPTED", "STARTED", "COMPLETED", "CANCELLED"), allowNull: false, defaultValue: "PENDING" },
       remarks: { type: DataTypes.TEXT, allowNull: true }
