@@ -38,7 +38,7 @@ const crudConfigs = {
     filters: [
       {name: "status", label: "Status", type: "select", options: [{value: "", label: "All Status"}, {value: "ACTIVE", label: "Active"}, {value: "INACTIVE", label: "Inactive"}]}
     ],
-    deleteFilter: ["isDeleted"],
+    deleteFilter: [{name: "isDeleted", value: 0}],
     sortOptions: [{value: "createdAt", label: "Created Date"}, {value: "name", label: "Name"}, {value: "customerCode", label: "Customer Code"}, {value: "status", label: "Status"}]
   },
   vehicles: {
@@ -58,15 +58,48 @@ const crudConfigs = {
     fields: [
       {name: "vehicleNo", label: "Registration Number", type: "text", required: true}, 
       {name: "brand", label: "Make", type: "text"}, 
-      {name: "model", label: "Model", type: "text"}, 
-      {name: "vehicleType", label: "Vehicle Type", type: "text"}, 
+      {name: "model", label: "Model", type: "text"},
+      {name: "year", label: "Year", type: "number"},
+      {name: "insuranceExpiry", label: "Insurance Expiry", type: "date"},
+      {name: "fitnessExpiry", label: "Fitness Expiry", type: "date"},  //{name: "vehicleType", label: "Vehicle Type", type: "text"}, 
+      {name: "vehicleTypeId", label: "Vehicle Type", type: "ajaxselect", callingurl: "/vehicle-types?isDeleted=0&status=ACTIVE", displayField: ["code", "name", "seatingCapacity", "baseFare", "perKmRate"], displayFieldFormat: "{name} - {code} [Capacity: {seatingCapacity}, Base Fare: {baseFare}, Rate Per KM: {perKmRate}]", valueField: "id", required: true}, 
       {name: "status", label: "Status", type: "select", required: true, options: [{value: "ACTIVE", label: "Active"}, {value: "INACTIVE", label: "Inactive"}]}
     ],
     filters: [
       {name: "status", label: "Status", type: "select", options: [{value: "", label: "All Status"}, {value: "ACTIVE", label: "Active"}, {value: "INACTIVE", label: "Inactive"}]}
     ],
-    deleteFilter: ["isDeleted"],
+    deleteFilter: [{name: "isDeleted", value: 0}],
     sortOptions: [{value: "createdAt", label: "Created Date"}, {value: "vehicleNo", label: "Registration"}, {value: "brand", label: "Make"}, {value: "status", label: "Status"}]
+  },
+  vehicle_types: {
+    title: "Vehicles Type",
+    singularTitle: "Vehicle Type",
+    endpoint: "/vehicle-types",
+    permissionPrefix: "vehicle_types",
+    searchPlaceholder: "Search vehicle type, seating capacity, rate per KM...",
+    columns: [
+      {field: "code", label: "Code"}, 
+      {field: "name", label: "Type Name"}, 
+      {field: "seatingCapacity", label: "Seating Capacity"}, 
+      {field: "baseFare", label: "Base Fare"}, 
+      {field: "perKmRate", label: "Rate Per KM"}, 
+      {field: "status", label: "Status", type: "status"}, 
+      {field: "createdAt", label: "Created", type: "datetime"}
+    ],
+    fields: [
+      {name: "code", label: "Code", type: "text", required: true}, 
+      {name: "name", label: "Type Name", type: "text", required: true}, 
+      {name: "description", label: "Details", type: "textarea"}, 
+      {name: "seatingCapacity", label: "Seating Capacity", type: "number", required: true}, 
+      {name: "baseFare", label: "Base Fare", type: "text", required: true}, 
+      {name: "perKmRate", label: "Rate Per KM", type: "text", required: true}, 
+      {name: "status", label: "Status", type: "select", required: true, options: [{value: "ACTIVE", label: "Active"}, {value: "INACTIVE", label: "Inactive"}]}
+    ],
+    filters: [
+      {name: "status", label: "Status", type: "select", options: [{value: "", label: "All Status"}, {value: "ACTIVE", label: "Active"}, {value: "INACTIVE", label: "Inactive"}]}
+    ],
+    deleteFilter: [{name: "isDeleted", value: 0}],
+    sortOptions: [{value: "createdAt", label: "Created Date"}, {value: "name", label: "Type Name"}, {value: "seatingCapacity", label: "Seating Capacity"}, {value: "baseFare", label: "Base Fare"}, {value: "status", label: "Status"}]
   }
 };
 
@@ -154,7 +187,7 @@ document.getElementById("loginForm").addEventListener("submit", async e => {
  */
 document.querySelectorAll(".admin-nav").forEach(item => {
   item.addEventListener("click", async () => {
-    const pageName = item.dataset.page;
+    const pageName = item.dataset.page;   //console.log("Navigating to page:", pageName);
 
     /*
      * Update active menu
@@ -243,12 +276,15 @@ document.getElementById("confirmLogoutBtn").addEventListener("click", () => {
 });
 
 
-async function loadPage(name) {
+async function loadPage(name) {   
+  //console.log("Loading page:", name);
+  
   try {
     if (name === "dashboard") return dashboard();
     if (name === "customers") return customersPage();   //crudPage("Customers", "/customers", ["name","mobile","email","city","status"]);
     if (name === "drivers") return driversPage();       //crudPage("Drivers", "/drivers", ["driverCode","name","mobile","licenseNo","availability","status","rating"]);
     if (name === "vehicles") return crudPage(name);     //crudPage("Vehicles", "/vehicles?isDeleted=0", ["vehicleNo","vehicleType","brand","model","status"]);
+    if (name === "vehicle_types") return crudPage(name);
     if (name === "bookings") return bookingsPage();
     if (name === "payments") return crudPage("Payments", "/payments", ["bookingId","amount","paymentMode","paymentStatus","paymentDate"]);
     if (name === "reports") return reports();
@@ -262,7 +298,7 @@ async function loadPage(name) {
 }
 
 async function dashboard() {
-  const d = await api("/dashboard");
+  const d = await api("/dashboard");  //console.log(d);
   page.innerHTML = `
     <div class="d-flex justify-content-between mb-4"><h2>Dashboard</h2><span class="text-muted">${new Date().toLocaleString()}</span></div>
     <div class="row g-3">
@@ -1624,6 +1660,13 @@ async function loadCrudData(name) {
   }
   const state = getCrudState(name);
   const params = new URLSearchParams(); //console.log(params);
+
+  if(config.deleteFilter && config.deleteFilter.length > 0){
+    config.deleteFilter.forEach(filter => {
+      params.set(filter.name, filter.value);
+    });
+  }
+
   params.set("page", state.page);
   params.set("limit", state.limit);
   if(state.search) { params.set("search", state.search); }
@@ -1753,12 +1796,27 @@ async function crudForm(name, id = null) {
     return;
   }
   let record = {};
+  let formFields = config.fields || [];
+
   try {
     if(id) {
       const response = await api(`${config.endpoint}/${id}`);
       record = response.data || response;
     }
-    page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><h4 class="mb-0">${id ? "Edit" : "Add"}${dcEscape(config.singularTitle)}</h4><button type="button" class="btn btn-outline-secondary" id="crudFormBackBtn"><i class="bi bi-arrow-left me-1"></i>Back</button></div><div class="card shadow-sm"><div class="card-body"><form id="crudFormElement" novalidate><div class="row g-3">${config.fields.map(field => renderCrudFormField(field, record)).join("")}</div><div class="d-flex justify-content-end gap-2 mt-4"><button type="button" class="btn btn-outline-secondary" id="crudCancelBtn">Cancel</button><button type="submit" class="btn btn-primary" id="crudSaveBtn"><i class="bi bi-check-lg me-1"></i>Save</button></div></form></div></div>`;
+
+    for (let field of formFields) {
+      if(field.type === "ajaxselect" && field.callingurl) {
+        try {
+          const optionResult = await api(field.callingurl);
+          field.ajaxdata = optionResult.data || [];
+        } catch (error) {
+          console.error(`Error loading options for field ${field.name}:`, error);
+        }
+      }
+    }
+    //console.log("Form Fields after processing ajaxselect:", formFields);
+    
+    page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><h4 class="mb-0">${id ? "Edit" : "Add"}${dcEscape(config.singularTitle)}</h4><button type="button" class="btn btn-outline-secondary" id="crudFormBackBtn"><i class="bi bi-arrow-left me-1"></i>Back</button></div><div class="card shadow-sm"><div class="card-body"><form id="crudFormElement" novalidate><div class="row g-3">${formFields.map(field => renderCrudFormField(field, record)).join("")}</div><div class="d-flex justify-content-end gap-2 mt-4"><button type="button" class="btn btn-outline-secondary" id="crudCancelBtn">Cancel</button><button type="submit" class="btn btn-primary" id="crudSaveBtn"><i class="bi bi-check-lg me-1"></i>Save</button></div></form></div></div>`;
 
     document.getElementById("crudFormBackBtn")?.addEventListener("click", () => { crudPage(name, getCrudState(name).page); });
     document.getElementById("crudCancelBtn")?.addEventListener("click", () => { crudPage(name, getCrudState(name).page); });
@@ -1777,11 +1835,43 @@ function renderCrudFormField(field, record) {
   const value = record[field.name] ?? field.defaultValue ?? "";
   const required = field.required ? "required" : "";
 
+  //console.log("Rendering field:", field, "with value:", value);
   if(field.type === "textarea") {
     return `<div class="col-12"><label class="form-label">${dcEscape(field.label)} ${field.required ? '<span class="text-danger">*</span>' : ""}</label><textarea class="form-control" name="${dcEscape(field.name)}" rows="3" ${required}>${dcEscape(value)}</textarea></div>`;
   }
   if(field.type === "select") {
     return `<div class="col-md-6"><label class="form-label">${dcEscape(field.label)} ${field.required ? '<span class="text-danger">*</span>' : ""}</label><select class="form-select" name="${dcEscape(field.name)}" ${required}>${(field.options || []).map(option => `<option value="${dcEscape(option.value)}" ${String(value) === String(option.value) ? "selected" : ""}> ${dcEscape(option.label)}</option>`).join("")}</select></div>`;
+  }
+  if(field.type === "ajaxselect") {
+    //console.log(`Ajax data for ${field.name}:`, field.ajaxdata);
+    try {
+      let fcontent = "";
+      if(field.displayFieldFormat && typeof field.displayFieldFormat === "string") {
+        const template = field.displayFieldFormat;
+        let temdataRows = field.ajaxdata || [];
+
+        temdataRows.map((row, index) => {
+          const formattedString = template.replace(/\{(\w+)\}/g, (match, key) => {
+            const value = row[key];
+            return (value && !isNaN(value) && String(value).includes('.')) ? parseFloat(value) : value;
+          });
+          row.formattedString = formattedString;
+          temdataRows[index] = row;
+        });
+        //console.log(`Formatted ajax data for ${field.name}:`, temdataRows);
+
+        fcontent = `<div class="col-md-6"><label class="form-label">${dcEscape(field.label)} ${field.required ? '<span class="text-danger">*</span>' : ""}</label><select class="form-select" name="${dcEscape(field.name)}" ${required}>${temdataRows.map(row => `<option value="${dcEscape(row[field.valueField])}" ${String(value) === String(row[field.valueField]) ? "selected" : ""}>${dcEscape(row.formattedString)}</option>`).join("")}</select></div>`;
+      } else {
+        if(!Array.isArray(field.displayField)) {
+          field.displayField = ["name"];
+        }
+        fcontent = `<div class="col-md-6"><label class="form-label">${dcEscape(field.label)} ${field.required ? '<span class="text-danger">*</span>' : ""}</label><select class="form-select" name="${dcEscape(field.name)}" ${required}>${(field.ajaxdata || []).map(row => `<option value="${dcEscape(row[field.valueField])}" ${String(value) === String(row[field.valueField]) ? "selected" : ""}>${dcEscape(field.displayField.map(key => row[key]).join(" - "))}</option>`).join("")}</select></div>`;
+      }
+      //console.log("Rendering ajaxselect field:", field, "with value:", value, "and content:", fcontent);
+      return fcontent;
+    } catch (error) {
+      console.error("Error loading select options:", error);
+    }
   }
   return `<div class="col-md-6"><label class="form-label">${dcEscape(field.label)} ${field.required ? '<span class="text-danger">*</span>' : ""}</label><input type="${dcEscape(field.type || "text")}" class="form-control" name="${dcEscape(field.name)}" value="${dcEscape(value)}" ${required}></div>`;
 }
@@ -2145,15 +2235,30 @@ async function editBooking(id) {
 async function bookingForm(id = null) {
   const page = document.getElementById("page");
   try {
-    const requests = [api("/customers?limit=100")];
+    //const requests = [api("/customers?limit=100")];
+    const requests = [api("/customers?status=ACTIVE"), api("/vehicles?status=ACTIVE")];
     if(id) {
+      requests.push(api("/vehicle-types?status=ACTIVE"));
       requests.push(api(`/bookings/${id}`));
     }
-    const results = await Promise.all(requests);
+    const results = await Promise.all(requests);  //console.log("Booking form results:", results);
     const customerResult = results[0];
     const customers = customerResult.data || customerResult || [];
-    const booking = id ? results[1] : null;
-    page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="mb-1">${id ? "Edit Booking" : "New Booking"}</h4><div class="text-muted">${id ? "Update trip and fare information." : "Create a local or outstation booking."}</div></div><button type="button" class="btn btn-outline-secondary" id="backBookingsBtn"><i class=" bi bi-arrow-left me-1"></i>Back</button></div><form id="bookingForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-6"><label class="form-label" >Customer</label><select class="form-select" id="bookingCustomer" required ><option value="">Select Customer</option>${customers.map(customer => `<option value="${customer.id}" ${Number(booking?.customerId) === Number(customer.id) ? "selected" : ""}>${dcEscape(customer.name)} - ${dcEscape(customer.mobile || "")}</option>`).join("")}</select></div><div class="col-md-3"><label class="form-label">Trip Category</label><select class="form-select" id="bookingTripCategory"><option value="LOCAL" ${(booking?.tripCategory || "LOCAL") === "LOCAL" ? "selected" : ""}>Local</option><option value="OUTSTATION" ${booking?.tripCategory === "OUTSTATION" ? "selected" : ""}>Outstation</option></select></div><div class="col-md-3"><label class="form-label">Booking Type</label><select class="form-select" id="bookingType"><option value="ONE_WAY" ${(booking?.bookingType || "ONE_WAY") === "ONE_WAY" ? "selected" : ""}>One Way</option><option value="ROUND_TRIP" ${booking?.bookingType === "ROUND_TRIP" ? "selected" : ""}>Round Trip</option><option value="HOURLY" ${booking?.bookingType === "HOURLY" ? "selected" : ""}>Hourly</option></select></div><div class="col-md-6"><label class="form-label">Pickup Location</label><input type="text" class="form-control" id="bookingPickup" value="${dcEscape(booking?.pickupLocation || "")}" required ></div><div class="col-md-6"><label class="form-label">Drop Location</label><input type="text" class="form-control" id="bookingDrop" value="${dcEscape(booking?.dropLocation || "")}" required></div><div class="col-md-3"><label class="form-label">Pickup Date</label><input type="date" class="form-control" id="bookingPickupDate" value="${dcEscape(booking?.pickupDate || "")}" required></div><div class="col-md-3"><label class="form-label">Pickup Time</label><input type="time" class="form-control" id="bookingPickupTime" value="${dcEscape(booking?.pickupTime || "")}" required></div><div class="col-md-3outstation-field"><label class="form-label">Return Date</label><input type="date" class="form-control" id="bookingReturnDate" value="${dcEscape(booking?.returnDate || "")}"></div><div class="col-md-3outstation-field"><label class="form-label">Return Time</label><input type="time" class="form-control" id="bookingReturnTime" value="${dcEscape(booking?.returnTime || "")}"></div><div class="col-md-3outstation-field"><label class="form-label">Distance (KM)</label><input type="number" min="0" step="0.01" class="form-control" id="bookingDistance" value="${booking?.estimatedDistanceKm || ""}"></div><div class="col-md-3outstation-field"><label class="form-label">Estimated Days</label><input type="number" min="1" class="form-control" id="bookingDays" value="${booking?.estimatedDays || ""}"></div><div class="col-md-3"><label class="form-label">Vehicle Type</label><input type="text" class="form-control" id="bookingVehicleType" value="${dcEscape(booking?.vehicleType || "")}" placeholder="Sedan / SUV / Hatchback"></div><div class="col-12"><hr><h6>Fare Breakdown</h6></div>${bookingMoneyField("bookingBaseFare", "Base Fare", booking?.baseFare)} ${bookingMoneyField("bookingDriverAllowance", "Driver Allowance", booking?.driverAllowance)} ${bookingMoneyField("bookingNightAllowance", "Night Allowance", booking?.nightAllowance)} ${bookingMoneyField("bookingToll", "Toll Charges", booking?.tollCharges)} ${bookingMoneyField("bookingParking", "Parking Charges", booking?.parkingCharges)} ${bookingMoneyField("bookingStateTax", "State Tax", booking?.stateTax)} ${bookingMoneyField("bookingOtherCharges", "Other Charges", booking?.otherCharges)} ${bookingMoneyField("bookingDiscount", "Discount", booking?.discountAmount)}<div class="col-md-3"><label class="form-label">Total Fare</label><input type="text" class=" form-control fw-bold " id="bookingFarePreview" readonly></div><div class="col-12"><label class="form-label">Remarks</label><textarea class="form-control" id="bookingRemarks" rows="3">${dcEscape(booking?.remarks || "")}</textarea></div></div></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>${id ? "Update Booking" : "Create Booking"}</button></div></form>`;
+
+    const vehicleResult = results[1];
+    const vehicles = vehicleResult.data || vehicleResult || [];
+
+    const booking = id ? results[3] : null;
+
+    if(id && booking) {
+      const vehicleTypeResult = results[2]; //console.log("Vehicle type result:", vehicleTypeResult);
+      const vehicleTypes = vehicleTypeResult.data || vehicleTypeResult || [];   //console.log("Vehicle types:", vehicleTypes);
+      //console.log("Booking form data:", { id, customers, vehicles, booking, vehicleTypes });
+
+      page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="mb-1">${id ? "Edit Booking" : "New Booking"}</h4><div class="text-muted">${id ? "Update trip and fare information." : "Create a local or outstation booking."}</div></div><button type="button" class="btn btn-outline-secondary" id="backBookingsBtn"><i class=" bi bi-arrow-left me-1"></i>Back</button></div><form id="bookingForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-6"><label class="form-label" >Customer</label><select class="form-select" id="bookingCustomer" required ><option value="">Select Customer</option>${customers.map(customer => `<option value="${customer.id}" ${Number(booking?.customerId) === Number(customer.id) ? "selected" : ""}>${dcEscape(customer.name)} - ${dcEscape(customer.mobile || "")}</option>`).join("")}</select></div><div class="col-md-3"><label class="form-label">Trip Category</label><select class="form-select" id="bookingTripCategory"><option value="LOCAL" ${(booking?.tripCategory || "LOCAL") === "LOCAL" ? "selected" : ""}>Local</option><option value="OUTSTATION" ${booking?.tripCategory === "OUTSTATION" ? "selected" : ""}>Outstation</option></select></div><div class="col-md-3"><label class="form-label">Booking Type</label><select class="form-select" id="bookingType"><option value="ONE_WAY" ${(booking?.bookingType || "ONE_WAY") === "ONE_WAY" ? "selected" : ""}>One Way</option><option value="ROUND_TRIP" ${booking?.bookingType === "ROUND_TRIP" ? "selected" : ""}>Round Trip</option><option value="HOURLY" ${booking?.bookingType === "HOURLY" ? "selected" : ""}>Hourly</option></select></div><div class="col-md-6"><label class="form-label">Pickup Location</label><input type="text" class="form-control" id="bookingPickup" value="${dcEscape(booking?.pickupLocation || "")}" required ></div><div class="col-md-6"><label class="form-label">Drop Location</label><input type="text" class="form-control" id="bookingDrop" value="${dcEscape(booking?.dropLocation || "")}" required></div><div class="col-md-3"><label class="form-label">Pickup Date</label><input type="date" class="form-control" id="bookingPickupDate" value="${dcEscape(booking?.pickupDate || "")}" required></div><div class="col-md-3"><label class="form-label">Pickup Time</label><input type="time" class="form-control" id="bookingPickupTime" value="${dcEscape(booking?.pickupTime || "")}" required></div><div class="col-md-3outstation-field"><label class="form-label">Return Date</label><input type="date" class="form-control" id="bookingReturnDate" value="${dcEscape(booking?.returnDate || "")}"></div><div class="col-md-3outstation-field"><label class="form-label">Return Time</label><input type="time" class="form-control" id="bookingReturnTime" value="${dcEscape(booking?.returnTime || "")}"></div><div class="col-md-3outstation-field"><label class="form-label">Distance (KM)</label><input type="number" min="0" step="0.01" class="form-control" id="bookingDistance" value="${booking?.estimatedDistanceKm || ""}"></div><div class="col-md-3outstation-field"><label class="form-label">Estimated Days</label><input type="number" min="1" class="form-control" id="bookingDays" value="${booking?.estimatedDays || ""}"></div><div class="col-md-6"><label class="form-label" >Vehicle Type</label><select class="form-select" id="bookingVehicleType"><option value="">Select Vehicle Type</option>${vehicleTypes.map(vehicleType => `<option value="${vehicleType.id}" ${Number(booking?.vehicleTypeId) === Number(vehicleType.id) ? "selected" : ""}>${dcEscape(vehicleType.name)} - ${dcEscape(vehicleType.code)}</option>`).join("")}</select></div><div class="col-md-6"><label class="form-label" >Vehicle</label><select class="form-select" id="bookingVehicle"><option value="">Select Vehicle</option>${vehicles.map(vehicle => `<option value="${vehicle.id}" ${Number(booking?.vehicleId) === Number(vehicle.id) ? "selected" : ""}>${dcEscape(vehicle.brand)} - ${dcEscape(vehicle.model || "")} - ${dcEscape(vehicle.vehicleNo || "")} (${dcEscape(vehicle.vehicleType || "")})</option>`).join("")}</select></div><div class="col-12"><hr><h6>Fare Breakdown</h6></div>${bookingMoneyField("bookingBaseFare", "Base Fare", booking?.baseFare)} ${bookingMoneyField("bookingDriverAllowance", "Driver Allowance", booking?.driverAllowance)} ${bookingMoneyField("bookingNightAllowance", "Night Allowance", booking?.nightAllowance)} ${bookingMoneyField("bookingToll", "Toll Charges", booking?.tollCharges)} ${bookingMoneyField("bookingParking", "Parking Charges", booking?.parkingCharges)} ${bookingMoneyField("bookingStateTax", "State Tax", booking?.stateTax)} ${bookingMoneyField("bookingOtherCharges", "Other Charges", booking?.otherCharges)} ${bookingMoneyField("bookingDiscount", "Discount", booking?.discountAmount)}<div class="col-md-3"><label class="form-label">Total Fare</label><input type="text" class=" form-control fw-bold " id="bookingFarePreview" readonly></div><div class="col-12"><label class="form-label">Remarks</label><textarea class="form-control" id="bookingRemarks" rows="3">${dcEscape(booking?.remarks || "")}</textarea></div></div></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>${id ? "Update Booking" : "Create Booking"}</button></div></form>`;
+    } else {
+      page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="mb-1">${id ? "Edit Booking" : "New Booking"}</h4><div class="text-muted">${id ? "Update trip and fare information." : "Create a local or outstation booking."}</div></div><button type="button" class="btn btn-outline-secondary" id="backBookingsBtn"><i class=" bi bi-arrow-left me-1"></i>Back</button></div><form id="bookingForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-6"><label class="form-label" >Customer</label><select class="form-select" id="bookingCustomer" required ><option value="">Select Customer</option>${customers.map(customer => `<option value="${customer.id}" ${Number(booking?.customerId) === Number(customer.id) ? "selected" : ""}>${dcEscape(customer.name)} - ${dcEscape(customer.mobile || "")}</option>`).join("")}</select></div><div class="col-md-3"><label class="form-label">Trip Category</label><select class="form-select" id="bookingTripCategory"><option value="LOCAL" ${(booking?.tripCategory || "LOCAL") === "LOCAL" ? "selected" : ""}>Local</option><option value="OUTSTATION" ${booking?.tripCategory === "OUTSTATION" ? "selected" : ""}>Outstation</option></select></div><div class="col-md-3"><label class="form-label">Booking Type</label><select class="form-select" id="bookingType"><option value="ONE_WAY" ${(booking?.bookingType || "ONE_WAY") === "ONE_WAY" ? "selected" : ""}>One Way</option><option value="ROUND_TRIP" ${booking?.bookingType === "ROUND_TRIP" ? "selected" : ""}>Round Trip</option><option value="HOURLY" ${booking?.bookingType === "HOURLY" ? "selected" : ""}>Hourly</option></select></div><div class="col-md-6"><label class="form-label">Pickup Location</label><input type="text" class="form-control" id="bookingPickup" value="${dcEscape(booking?.pickupLocation || "")}" required ></div><div class="col-md-6"><label class="form-label">Drop Location</label><input type="text" class="form-control" id="bookingDrop" value="${dcEscape(booking?.dropLocation || "")}" required></div><div class="col-md-3"><label class="form-label">Pickup Date</label><input type="date" class="form-control" id="bookingPickupDate" value="${dcEscape(booking?.pickupDate || "")}" required></div><div class="col-md-3"><label class="form-label">Pickup Time</label><input type="time" class="form-control" id="bookingPickupTime" value="${dcEscape(booking?.pickupTime || "")}" required></div><div class="col-md-3outstation-field"><label class="form-label">Return Date</label><input type="date" class="form-control" id="bookingReturnDate" value="${dcEscape(booking?.returnDate || "")}"></div><div class="col-md-3outstation-field"><label class="form-label">Return Time</label><input type="time" class="form-control" id="bookingReturnTime" value="${dcEscape(booking?.returnTime || "")}"></div><div class="col-md-3outstation-field"><label class="form-label">Distance (KM)</label><input type="number" min="0" step="0.01" class="form-control" id="bookingDistance" value="${booking?.estimatedDistanceKm || ""}"></div><div class="col-md-3outstation-field"><label class="form-label">Estimated Days</label><input type="number" min="1" class="form-control" id="bookingDays" value="${booking?.estimatedDays || ""}"></div><div class="col-md-6"><label class="form-label" >Vehicle</label><select class="form-select" id="bookingVehicle"><option value="">Select Vehicle</option>${vehicles.map(vehicle => `<option value="${vehicle.id}" ${Number(booking?.vehicleId) === Number(vehicle.id) ? "selected" : ""}>${dcEscape(vehicle.brand)} - ${dcEscape(vehicle.model || "")} - ${dcEscape(vehicle.vehicleNo || "")} (${dcEscape(vehicle.vehicleType || "")})</option>`).join("")}</select></div><div class="col-12"><hr><h6>Fare Breakdown</h6></div>${bookingMoneyField("bookingBaseFare", "Base Fare", booking?.baseFare)} ${bookingMoneyField("bookingDriverAllowance", "Driver Allowance", booking?.driverAllowance)} ${bookingMoneyField("bookingNightAllowance", "Night Allowance", booking?.nightAllowance)} ${bookingMoneyField("bookingToll", "Toll Charges", booking?.tollCharges)} ${bookingMoneyField("bookingParking", "Parking Charges", booking?.parkingCharges)} ${bookingMoneyField("bookingStateTax", "State Tax", booking?.stateTax)} ${bookingMoneyField("bookingOtherCharges", "Other Charges", booking?.otherCharges)} ${bookingMoneyField("bookingDiscount", "Discount", booking?.discountAmount)}<div class="col-md-3"><label class="form-label">Total Fare</label><input type="text" class=" form-control fw-bold " id="bookingFarePreview" readonly></div><div class="col-12"><label class="form-label">Remarks</label><textarea class="form-control" id="bookingRemarks" rows="3">${dcEscape(booking?.remarks || "")}</textarea></div></div></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>${id ? "Update Booking" : "Create Booking"}</button></div></form>`;
+    }
 
     document.getElementById("backBookingsBtn").addEventListener("click", () => { bookingsPage(); });
     const tripCategory = document.getElementById("bookingTripCategory");
@@ -2174,11 +2279,12 @@ async function bookingForm(id = null) {
     calculateBookingFarePreview();
     document.getElementById("bookingForm").addEventListener("submit", async event => {
       event.preventDefault();
-      const payload = collectBookingFormData();
       try {
         if(id) {
+          const payload = collectBookingFormData("edit");   //console.log(payload);
           await api(`/bookings/${id}`, {method: "PUT", body: JSON.stringify(payload)});
         } else {
+          const payload = collectBookingFormData();   //console.log(payload);
           await api("/bookings", {method: "POST", body: JSON.stringify(payload)});
         }
         showGlobalAlert("success", id ? "Booking updated successfully." : "Booking created successfully.");
@@ -2213,30 +2319,57 @@ function calculateBookingFarePreview() {
   }
 }
 
-function collectBookingFormData() {
-  return {
-    customerId: Number(document.getElementById("bookingCustomer").value),
-    tripCategory: document.getElementById("bookingTripCategory").value,
-    bookingType: document.getElementById("bookingType").value,
-    pickupLocation: document.getElementById("bookingPickup").value.trim(),
-    dropLocation: document.getElementById("bookingDrop").value.trim(),
-    pickupDate: document.getElementById("bookingPickupDate").value,
-    pickupTime: document.getElementById("bookingPickupTime").value,
-    returnDate: document.getElementById("bookingReturnDate").value || null,
-    returnTime: document.getElementById("bookingReturnTime").value || null,
-    estimatedDistanceKm: bookingNumber("bookingDistance") || null,
-    estimatedDays: bookingNumber("bookingDays") || null,
-    vehicleType: document.getElementById("bookingVehicleType").value.trim(),
-    baseFare: bookingNumber("bookingBaseFare"),
-    driverAllowance: bookingNumber("bookingDriverAllowance"),
-    nightAllowance: bookingNumber("bookingNightAllowance"),
-    tollCharges: bookingNumber("bookingToll"),
-    parkingCharges: bookingNumber("bookingParking"),
-    stateTax: bookingNumber("bookingStateTax"),
-    otherCharges: bookingNumber("bookingOtherCharges"),
-    discountAmount: bookingNumber("bookingDiscount"),
-    remarks: document.getElementById("bookingRemarks").value.trim()
-  };
+function collectBookingFormData(mode = "create") {
+  if(mode === "create") {
+    return {
+      customerId: Number(document.getElementById("bookingCustomer").value),
+      tripCategory: document.getElementById("bookingTripCategory").value,
+      bookingType: document.getElementById("bookingType").value,
+      pickupLocation: document.getElementById("bookingPickup").value.trim(),
+      dropLocation: document.getElementById("bookingDrop").value.trim(),
+      pickupDate: document.getElementById("bookingPickupDate").value,
+      pickupTime: document.getElementById("bookingPickupTime").value,
+      returnDate: document.getElementById("bookingReturnDate").value || null,
+      returnTime: document.getElementById("bookingReturnTime").value || null,
+      estimatedDistanceKm: bookingNumber("bookingDistance") || null,
+      estimatedDays: bookingNumber("bookingDays") || null,
+      vehicleId: Number(document.getElementById("bookingVehicle").value),
+      baseFare: bookingNumber("bookingBaseFare"),
+      driverAllowance: bookingNumber("bookingDriverAllowance"),
+      nightAllowance: bookingNumber("bookingNightAllowance"),
+      tollCharges: bookingNumber("bookingToll"),
+      parkingCharges: bookingNumber("bookingParking"),
+      stateTax: bookingNumber("bookingStateTax"),
+      otherCharges: bookingNumber("bookingOtherCharges"),
+      discountAmount: bookingNumber("bookingDiscount"),
+      remarks: document.getElementById("bookingRemarks").value.trim()
+    };
+  } else{
+    return {
+      customerId: Number(document.getElementById("bookingCustomer").value),
+      tripCategory: document.getElementById("bookingTripCategory").value,
+      bookingType: document.getElementById("bookingType").value,
+      pickupLocation: document.getElementById("bookingPickup").value.trim(),
+      dropLocation: document.getElementById("bookingDrop").value.trim(),
+      pickupDate: document.getElementById("bookingPickupDate").value,
+      pickupTime: document.getElementById("bookingPickupTime").value,
+      returnDate: document.getElementById("bookingReturnDate").value || null,
+      returnTime: document.getElementById("bookingReturnTime").value || null,
+      estimatedDistanceKm: bookingNumber("bookingDistance") || null,
+      estimatedDays: bookingNumber("bookingDays") || null,
+      vehicleTypeId: Number(document.getElementById("bookingVehicleType").value),
+      vehicleId: Number(document.getElementById("bookingVehicle").value),
+      baseFare: bookingNumber("bookingBaseFare"),
+      driverAllowance: bookingNumber("bookingDriverAllowance"),
+      nightAllowance: bookingNumber("bookingNightAllowance"),
+      tollCharges: bookingNumber("bookingToll"),
+      parkingCharges: bookingNumber("bookingParking"),
+      stateTax: bookingNumber("bookingStateTax"),
+      otherCharges: bookingNumber("bookingOtherCharges"),
+      discountAmount: bookingNumber("bookingDiscount"),
+      remarks: document.getElementById("bookingRemarks").value.trim()
+    };
+  }
 }
 
 /*
@@ -2262,13 +2395,14 @@ async function assignBookingDriverForm(bookingId) {
     ] = await Promise.all([
       api(`/bookings/${bookingId}`),
       api("/drivers?availability=AVAILABLE&status=ACTIVE&limit=100"),
-      api("/vehicles?limit=100")
+      api("/vehicles?&status=ACTIVE&limit=100")
     ]);
     const drivers = driverResult.data || driverResult || [];
     const vehicles = vehicleResult.data || vehicleResult || [];
     const page = document.getElementById("page");
-    page.innerHTML = `<div class="mb-4"><h4>Assign Driver</h4><div class="text-muted">${dcEscape(booking.bookingNo)}</div></div><form id="bookingAssignmentForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">Driver</label><select class="form-select" id="assignmentDriver" required><option value="">Select Driver</option>${drivers.map( driver => `<option value="${driver.id}">${dcEscape(driver.name)} - ${dcEscape(driver.mobile || "")}</option>`).join("")}</select></div><div class="col-md-6"><label class="form-label">Vehicle</label><select class="form-select" id="assignmentVehicle"><option value="">No Vehicle</option>${vehicles.map(vehicle => `<option value="${vehicle.id}">${dcEscape(vehicle.registrationNo || vehicle.vehicleNo || `Vehicle ${vehicle.id}`)}</option>`).join("")}</select></div></div></div><div class="card-footer bg-white d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" id="cancelAssignmentBtn" >Cancel</button><button type="submit" class="btn btn-primary">Assign Driver</button></div></form>`;
+    page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="mb-1">Assign Driver</h4><div class="text-muted">${dcEscape(booking.bookingNo)}</div></div><button type="button" class="btn btn-outline-secondary" id="backBookingsBtn"><i class=" bi bi-arrow-left me-1"></i>Back</button></div><form id="bookingAssignmentForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">Driver</label><select class="form-select" id="assignmentDriver" required><option value="">Select Driver</option>${drivers.map( driver => `<option value="${driver.id}">${dcEscape(driver.name)} - ${dcEscape(driver.mobile || "")}</option>`).join("")}</select></div><div class="col-md-6"><label class="form-label">Vehicle</label><select class="form-select" id="assignmentVehicle"><option value="">No Vehicle</option>${vehicles.map(vehicle => `<option value="${vehicle.id}">${dcEscape(vehicle.registrationNo || vehicle.vehicleNo || `Vehicle ${vehicle.id}`)}</option>`).join("")}</select></div></div></div><div class="card-footer bg-white d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" id="cancelAssignmentBtn" >Cancel</button><button type="submit" class="btn btn-primary">Assign Driver</button></div></form>`;
 
+	document.getElementById("backBookingsBtn").addEventListener("click", () => { bookingsPage(); });
     document.getElementById("cancelAssignmentBtn").addEventListener("click", () => { bookingsPage(); });
     document.getElementById("bookingAssignmentForm").addEventListener("submit", async event => {
       event.preventDefault();
@@ -2294,8 +2428,9 @@ async function bookingStatusForm(bookingId) {
     const booking = await api(`/bookings/${bookingId}`);
     const page = document.getElementById("page");
     const statuses = ["PENDING", "CONFIRMED", "ASSIGNED", "ACCEPTED", "STARTED", "COMPLETED"];
-    page.innerHTML = `<div class="mb-4"><h4>Change Booking Status</h4><div class="text-muted">${dcEscape(booking.bookingNo)}</div></div><form id="bookingStatusForm" class="card shadow-sm"><div class="card-body"><label class="form-label">Status</label><select class="form-select" id="bookingNewStatus">${statuses.map(status => `<option value = "${status}" ${booking.status === status ? "selected" : ""}>${status}</option>`).join("")}</select></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary">Update Status</button></div></form>`;
+    page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="mb-1">Change Booking Status</h4><div class="text-muted">${dcEscape(booking.bookingNo)}</div></div><button type="button" class="btn btn-outline-secondary" id="backBookingsBtn"><i class=" bi bi-arrow-left me-1"></i>Back</button></div><form id="bookingStatusForm" class="card shadow-sm"><div class="card-body"><label class="form-label">Status</label><select class="form-select" id="bookingNewStatus">${statuses.map(status => `<option value = "${status}" ${booking.status === status ? "selected" : ""}>${status}</option>`).join("")}</select></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary">Update Status</button></div></form>`;
 
+	document.getElementById("backBookingsBtn").addEventListener("click", () => { bookingsPage(); });
     document.getElementById("bookingStatusForm").addEventListener("submit", async event => {
       event.preventDefault();
       try {
@@ -2315,8 +2450,9 @@ async function bookingCommissionForm(bookingId) {
   try {
     const booking = await api(`/bookings/${bookingId}`);
     const page = document.getElementById("page");
-    page.innerHTML = `<div class="mb-4"><h4>Driver Commission</h4><div class="text-muted">${dcEscape(booking.bookingNo)}</div></div><form id="bookingCommissionForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-4"><label class="form-label">Type</label><select class="form-select" id="bookingCommissionType"><option value="PERCENTAGE" ${booking.driverCommissionType === "PERCENTAGE" ? "selected" : ""}>Percentage</option><option value="FIXED" ${booking.driverCommissionType === "FIXED" ? "selected" : ""}>Fixed</option></select></div><div class="col-md-4"><label class="form-label">Rate</label><input type="number" min="0" step="0.01" class="form-control" id="bookingCommissionRate" value="${Number(booking.driverCommissionRate || 0)}"></div><div class="col-md-4 d-flex align-items-end"><div class="form-check form-switch mb-2"><input type="checkbox" class="form-check-input" id="bookingCommissionAllowances" ${booking.driverCommissionIncludeAllowances ? "checked" : ""}><label class="form-check-label">Include Allowances</label></div></div><div class="col-md-6"><div class="border rounded p-3 bg-light"><small class="text-muted">Current Commission</small><div class="fs-5 fw-semibold">${formatMoney(booking.driverCommissionAmount)}</div></div></div><div class="col-md-6"><div class="border rounded p-3 bg-light"><small class="text-muted">Driver Net Earning</small><div class="fs-5 fw-semibold">${formatMoney(booking.driverNetEarning)}</div></div></div></div></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary">Update Commission</button></div></form>`;
+    page.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="mb-1">Driver Commission</h4><div class="text-muted">${dcEscape(booking.bookingNo)}</div></div><button type="button" class="btn btn-outline-secondary" id="backBookingsBtn"><i class=" bi bi-arrow-left me-1"></i>Back</button></div><form id="bookingCommissionForm" class="card shadow-sm"><div class="card-body"><div class="row g-3"><div class="col-md-4"><label class="form-label">Type</label><select class="form-select" id="bookingCommissionType"><option value="PERCENTAGE" ${booking.driverCommissionType === "PERCENTAGE" ? "selected" : ""}>Percentage</option><option value="FIXED" ${booking.driverCommissionType === "FIXED" ? "selected" : ""}>Fixed</option></select></div><div class="col-md-4"><label class="form-label">Rate</label><input type="number" min="0" step="0.01" class="form-control" id="bookingCommissionRate" value="${Number(booking.driverCommissionRate || 0)}"></div><div class="col-md-4 d-flex align-items-end"><div class="form-check form-switch mb-2"><input type="checkbox" class="form-check-input" id="bookingCommissionAllowances" ${booking.driverCommissionIncludeAllowances ? "checked" : ""}><label class="form-check-label">Include Allowances</label></div></div><div class="col-md-6"><div class="border rounded p-3 bg-light"><small class="text-muted">Current Commission</small><div class="fs-5 fw-semibold">${formatMoney(booking.driverCommissionAmount)}</div></div></div><div class="col-md-6"><div class="border rounded p-3 bg-light"><small class="text-muted">Driver Net Earning</small><div class="fs-5 fw-semibold">${formatMoney(booking.driverNetEarning)}</div></div></div></div></div><div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary">Update Commission</button></div></form>`;
 
+	document.getElementById("backBookingsBtn").addEventListener("click", () => { bookingsPage(); });
     document.getElementById("bookingCommissionForm").addEventListener("submit", async event => {
       event.preventDefault();
       try {
@@ -2422,10 +2558,7 @@ async function bookingDetailsPage(bookingId) {
   if(!page) {
     return;
   }
-  page.innerHTML = `<div class=" d-flex justify-content-center py-5 "
-        > <div class="     spinner-border     text-primary " role="status" ></div>
-        </div>
-    `;
+  page.innerHTML = `<div class="d-flex justify-content-center py-5 "><div class="spinner-border text-primary" role="status"></div></div>`;
   try {
     const booking = await api(`/bookings/${bookingId}`);
     const statusClasses = {
@@ -2440,7 +2573,7 @@ async function bookingDetailsPage(bookingId) {
     const statusClass = statusClasses[booking.status] || "secondary";
     const tripBadgeClass = booking.tripCategory === "OUTSTATION" ? "warning" : "secondary";
     const canEdit = !["COMPLETED", "CANCELLED"].includes(booking.status);
-    page.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"><div><h4 class="mb-1"><i class="bi bi-calendar-check me-2"></i>Booking Details</h4><div class="text-muted">${dcEscape(booking.bookingNo || `Booking#${booking.id}`)}</div></div><div class="d-flex flex-wrap gap-2">${canEdit ? `<button type="button" class="btn btn-outline-primary" id="editBookingDetailsBtn"><i class="bi bi-pencil me-1"></i>Edit</button><button type="button" class="btn btn-outline-success" id="assignBookingDriverBtn"><i class="bi bi-person-check me-1"></i>Assign Driver</button><button type="button" class="btn btn-outline-warning" id="changeBookingStatusBtn"><i    class="bi bi-arrow-repeat me-1"></i>Status</button><button type="button" class="btn btn-outline-dark" id="changeBookingCommissionBtn"><i class="bi bi-percent me-1"></i>Commission</button>` : ""}<button type="button" class="btn btn-outline-secondary" id="backToBookingsBtn"><i class="bi bi-arrow-left me-1"></i>Back</button></div></div><div class="row g-4"><!-- Booking Summary --><div class="col-xl-8"><div class="card shadow-sm mb-4"><div class="card-header bg-white d-flex justify-content-between align-items-center"><div><h6 class="mb-0">Booking Summary</h6></div><div class="d-flex gap-2"><span class="badge text-bg-${tripBadgeClass}">${dcEscape(booking.tripCategory || "LOCAL")}</span><span class="badge text-bg-${statusClass}">${dcEscape(booking.status || "-")}</span></div></div><div class="card-body"><div class="row g-4"><div class="col-md-6"><div class="small text-muted mb-1">Booking Number</div><div class="fw-semibold">${dcEscape(booking.bookingNo || `#${booking.id}`)}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Trip Category</div><div>${dcEscape(booking.tripCategory || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Booking Type</div><div>${formatBookingType(booking.bookingType)}</div></div><div class="col-md-6"><div class="small text-muted mb-1">Pickup Location</div><div><i class="bi bi-geo-alt me-1 text-primary"></i>${dcEscape(booking.pickupLocation || "-")}</div></div><div class="col-md-6"><div class="small text-muted mb-1">Drop Location</div><div><i class="bi bi-geo me-1 text-danger"></i>${dcEscape(booking.dropLocation || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Pickup Date</div><div>${dcEscape(booking.pickupDate || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Pickup Time</div><div>${formatBookingTime(booking.pickupTime)}</div></div>${booking.returnDate ? `<div class="col-md-3"><div class="small text-muted mb-1">Return Date</div><div>${dcEscape(booking.returnDate)}</div></div>` : ""} ${booking.returnTime ? `<div class="col-md-3"><div class="small text-muted mb-1">Return Time</div><div>${formatBookingTime(booking.returnTime)}</div></div>` : ""} ${booking.estimatedDistanceKm ? `<div class="col-md-3"><div class="small text-muted mb-1">Estimated Distance</div><div>${Number(booking.estimatedDistanceKm).toLocaleString("en-IN")} km</div></div>` : ""} ${booking.estimatedDays ? `<div class="col-md-3"><div class="small text-muted mb-1">Estimated Days</div><div>${Number(booking.estimatedDays)}</div></div>` : ""} <div class="col-md-3"><div class="small text-muted mb-1">Requested Vehicle Type</div><div>${dcEscape(booking.vehicleType || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Created</div><div>${formatBookingDateTime(booking.createdAt)}</div></div></div></div></div><!-- Customer --><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-person me-2"></i>Customer</h6></div><div class="card-body">${booking.customer ? `<div class="row g-3"><div class="col-md-4"><div class="small text-muted">Name</div><div class="fw-semibold">${dcEscape(booking.customer.name || "-")}</div></div><div class="col-md-4"><div class="small text-muted">Mobile</div><div>${dcEscape(booking.customer.mobile || "-")}</div></div><div class="col-md-4"><div class="small text-muted">Email</div><div>${dcEscape(booking.customer.email || "-")}</div></div><div class="col-md-4"><div class="small text-muted">Customer Code</div><div>${dcEscape(booking.customer.customerCode || "-")}</div></div></div>` : `<div class="text-muted">Customer information is unavailable.</div>`}</div></div><!-- Driver and Vehicle --><div class="row g-4"><div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-person-badge me-2"></i>Driver</h6></div><div class="card-body">${booking.driver ? `<div class="mb-3"><div class="fs-5 fw-semibold">${dcEscape(booking.driver.name || "-")}</div><div class="text-muted">${dcEscape(booking.driver.driverCode || "")}</div></div><div class="mb-2"><i class="bi bi-telephone me-2"></i>    ${dcEscape(booking.driver.mobile || "-")}</div><div><span class="badge text-bg-${getDriverAvailabilityClass(booking.driver.availability)}">${dcEscape(booking.driver.availability || "-")}</span></div>` : `<div class="text-muted">No driver assigned.</div>${canEdit ? `<button type="button" class="btn btn-sm btn-outline-primary mt-3" id="assignDriverInlineBtn">Assign Driver</button>` : ""}`}</div></div></div><div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-car-front me-2"></i>Vehicle</h6></div><div class="card-body">${booking.vehicle ? `<div class = "mb-2"><div class="fs-5 fw-semibold">${dcEscape(booking.vehicle.registrationNo || booking.vehicle.vehicleNo || `Vehicle #${booking.vehicle.id}`)}</div></div>${booking.vehicle.make || booking.vehicle.model ? `<div class="mb-2">${dcEscape([booking.vehicle.make, booking.vehicle.model].filter(Boolean).join(" "))}</div>` : ""} ${booking.vehicle.type || booking.vehicle.vehicleType ? `<div class="text-muted"> ${dcEscape(booking.vehicle.type || booking.vehicle.vehicleType)}</div>` : ""}` : `<div class="text-muted">No vehicle assigned.</div>`}</div></div></div></div></div><!-- Fare Side Panel --><div class="col-xl-4"><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0">Fare Breakdown</h6></div><div class="card-body">${bookingFareDetailRow("Base Fare", booking.baseFare)} ${bookingFareDetailRow("Driver Allowance", booking.driverAllowance)} ${bookingFareDetailRow("Night Allowance", booking.nightAllowance)} ${bookingFareDetailRow("Toll Charges", booking.tollCharges)} ${bookingFareDetailRow("Parking Charges", booking.parkingCharges)} ${bookingFareDetailRow("State Tax", booking.stateTax)} ${bookingFareDetailRow("Other Charges", booking.otherCharges)} ${bookingFareDetailRow("Discount", booking.discountAmount, true)}<hr><div class="d-flex justify-content-between align-items-center"><span class="fw-semibold">Total Fare</span><span class="fs-5 fw-bold">${formatMoney(booking.fare)}</span></div></div></div><!-- Commission --><div class="card shadow-sm mb-4"><div class="card-header bg-white d-flex justify-content-between align-items-center"><h6 class="mb-0">Driver Commission</h6>${canEdit ? `<button type="button" class="btn btn-sm btn-outline-secondary" id="editCommissionInlineBtn">Edit</button>` : ""}</div><div class="card-body"><div class="d-flex justify-content-between mb-2"><span class="text-muted">Type</span><span>${dcEscape(booking.driverCommissionType || "-")}</span></div><div class="d-flex justify-content-between mb-2"><span class="text-muted">Rate </span><span>${booking.driverCommissionType === "PERCENTAGE" ? `${Number(booking.driverCommissionRate || 0)}%` : formatMoney(booking.driverCommissionRate)}</span></div><div class="d-flex justify-content-between mb-2"><span class="text-muted">Include Allowances</span><span>${booking.driverCommissionIncludeAllowances ? "Yes" : "No"}</span></div><hr><div class="d-flex justify-content-between mb-2"><span class="text-muted">Commission</span><strong>${formatMoney(booking.driverCommissionAmount)}</strong></div><div class="d-flex justify-content-between"><span class="text-muted">Driver Net Earning</span><strong class="text-success">${formatMoney(booking.driverNetEarning)}</strong></div></div></div><!-- Remarks --><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0">Remarks</h6></div><div class="card-body"><div class="text-muted booking-remarks">${booking.remarks ? dcEscape(booking.remarks).replace(/\n/g, "<br>") : "No remarks available."}</div></div></div>${canEdit ? `<div class="card shadow-sm border-danger"><div class="card-body"><h6 class="text-danger">Booking Actions</h6><p class="small text-muted">Cancel the booking while preserving its operational history.</p><button type="button" class="btn btn-outline-danger w-100" id="cancelBookingDetailsBtn"><i class="bi bi-x-circle me-1"></i>Cancel Booking</button></div></div>` : ""}</div></div>`;
+    page.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"><div><h4 class="mb-1"><i class="bi bi-calendar-check me-2"></i>Booking Details</h4><div class="text-muted">${dcEscape(booking.bookingNo || `Booking#${booking.id}`)}</div></div><div class="d-flex flex-wrap gap-2">${canEdit ? `<button type="button" class="btn btn-outline-primary" id="editBookingDetailsBtn"><i class="bi bi-pencil me-1"></i>Edit</button><button type="button" class="btn btn-outline-success" id="assignBookingDriverBtn"><i class="bi bi-person-check me-1"></i>Assign Driver</button><button type="button" class="btn btn-outline-warning" id="changeBookingStatusBtn"><i    class="bi bi-arrow-repeat me-1"></i>Status</button><button type="button" class="btn btn-outline-dark" id="changeBookingCommissionBtn"><i class="bi bi-percent me-1"></i>Commission</button>` : ""}<button type="button" class="btn btn-outline-secondary" id="backToBookingsBtn"><i class="bi bi-arrow-left me-1"></i>Back</button></div></div><div class="row g-4"><!-- Booking Summary --><div class="col-xl-8"><div class="card shadow-sm mb-4"><div class="card-header bg-white d-flex justify-content-between align-items-center"><div><h6 class="mb-0">Booking Summary</h6></div><div class="d-flex gap-2"><span class="badge text-bg-${tripBadgeClass}">${dcEscape(booking.tripCategory || "LOCAL")}</span><span class="badge text-bg-${statusClass}">${dcEscape(booking.status || "-")}</span></div></div><div class="card-body"><div class="row g-4"><div class="col-md-6"><div class="small text-muted mb-1">Booking Number</div><div class="fw-semibold">${dcEscape(booking.bookingNo || `#${booking.id}`)}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Trip Category</div><div>${dcEscape(booking.tripCategory || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Booking Type</div><div>${formatBookingType(booking.bookingType)}</div></div><div class="col-md-6"><div class="small text-muted mb-1">Pickup Location</div><div><i class="bi bi-geo-alt me-1 text-primary"></i>${dcEscape(booking.pickupLocation || "-")}</div></div><div class="col-md-6"><div class="small text-muted mb-1">Drop Location</div><div><i class="bi bi-geo me-1 text-danger"></i>${dcEscape(booking.dropLocation || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Pickup Date</div><div>${dcEscape(booking.pickupDate || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Pickup Time</div><div>${formatBookingTime(booking.pickupTime)}</div></div>${booking.returnDate ? `<div class="col-md-3"><div class="small text-muted mb-1">Return Date</div><div>${dcEscape(booking.returnDate)}</div></div>` : ""} ${booking.returnTime ? `<div class="col-md-3"><div class="small text-muted mb-1">Return Time</div><div>${formatBookingTime(booking.returnTime)}</div></div>` : ""} ${booking.estimatedDistanceKm ? `<div class="col-md-3"><div class="small text-muted mb-1">Estimated Distance</div><div>${Number(booking.estimatedDistanceKm).toLocaleString("en-IN")} km</div></div>` : ""} ${booking.estimatedDays ? `<div class="col-md-3"><div class="small text-muted mb-1">Estimated Days</div><div>${Number(booking.estimatedDays)}</div></div>` : ""} <div class="col-md-3"><div class="small text-muted mb-1">Requested Vehicle Type</div><div>${dcEscape(booking.vehicleType || "-")}</div></div><div class="col-md-3"><div class="small text-muted mb-1">Created</div><div>${formatBookingDateTime(booking.createdAt)}</div></div></div></div></div><!-- Customer --><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-person me-2"></i>Customer</h6></div><div class="card-body">${booking.customer ? `<div class="row g-3"><div class="col-md-4"><div class="small text-muted">Name</div><div class="fw-semibold">${dcEscape(booking.customer.name || "-")}</div></div><div class="col-md-4"><div class="small text-muted">Mobile</div><div>${dcEscape(booking.customer.mobile || "-")}</div></div><div class="col-md-4"><div class="small text-muted">Email</div><div>${dcEscape(booking.customer.email || "-")}</div></div><div class="col-md-4"><div class="small text-muted">Customer Code</div><div>${dcEscape(booking.customer.customerCode || "-")}</div></div></div>` : `<div class="text-muted">Customer information is unavailable.</div>`}</div></div><!-- Driver and Vehicle --><div class="row g-4"><div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-person-badge me-2"></i>Driver</h6></div><div class="card-body">${booking.driver ? `<div class="mb-3"><div class="fs-5 fw-semibold">${dcEscape(booking.driver.name || "-")}</div><div class="text-muted">${dcEscape(booking.driver.driverCode || "")}</div></div><div class="mb-2"><i class="bi bi-telephone me-2"></i>    ${dcEscape(booking.driver.mobile || "-")}</div><div><span class="badge text-bg-${getDriverAvailabilityClass(booking.driver.availability)}">${dcEscape(booking.driver.availability || "-")}</span></div>` : `<div class="text-muted">No driver assigned.</div>${canEdit ? `<button type="button" class="btn btn-sm btn-outline-primary mt-3" id="assignDriverInlineBtn">Assign Driver</button>` : ""}`}</div></div></div><div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-car-front me-2"></i>Vehicle</h6></div><div class="card-body">${booking.vehicle ? `<div class = "mb-2"><div class="fs-5 fw-semibold">${dcEscape(booking.vehicle.registrationNo || booking.vehicle.vehicleNo || `Vehicle #${booking.vehicle.id}`)}</div></div>${booking.vehicle.make || booking.vehicle.model ? `<div class="mb-2">${dcEscape([booking.vehicle.make, booking.vehicle.model].filter(Boolean).join(" "))}</div>` : ""} ${booking.vehicle.type || booking.vehicle.vehicleType ? `<div class="text-muted"> ${dcEscape(booking.vehicle.type || booking.vehicle.vehicleType)}</div>` : ""}` : `<div class="text-muted">No vehicle assigned.</div>`}</div></div></div></div></div><!-- Fare Side Panel --><div class="col-xl-4"><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0">Fare Breakdown</h6></div><div class="card-body">${bookingFareDetailRow("Base Fare", booking.baseFare)} ${bookingFareDetailRow("Driver Allowance", booking.driverAllowance)} ${bookingFareDetailRow("Night Allowance", booking.nightAllowance)} ${bookingFareDetailRow("Toll Charges", booking.tollCharges)} ${bookingFareDetailRow("Parking Charges", booking.parkingCharges)} ${bookingFareDetailRow("State Tax", booking.stateTax)} ${bookingFareDetailRow("Other Charges", booking.otherCharges)} ${bookingFareDetailRow("Discount", booking.discountAmount, true)}<hr><div class="d-flex justify-content-between align-items-center"><span class="fw-semibold">Total Fare</span><span class="fs-5 fw-bold">${formatMoney(booking.fare)}</span></div></div></div><!-- Commission --><div class="card shadow-sm mb-4"><div class="card-header bg-white d-flex justify-content-between align-items-center"><h6 class="mb-0">Driver Commission</h6>${canEdit ? `<button type="button" class="btn btn-sm btn-outline-secondary" id="editCommissionInlineBtn">Edit</button>` : ""}</div><div class="card-body"><div class="d-flex justify-content-between mb-2"><span class="text-muted">Type</span><span>${dcEscape(booking.driverCommissionType || "-")}</span></div><div class="d-flex justify-content-between mb-2"><span class="text-muted">Rate </span><span>${booking.driverCommissionType === "PERCENTAGE" ? `${Number(booking.driverCommissionRate || 0)}%` : formatMoney(booking.driverCommissionRate)}</span></div><div class="d-flex justify-content-between mb-2"><span class="text-muted">Include Allowances</span><span>${booking.driverCommissionIncludeAllowances ? "Yes" : "No"}</span></div><hr><div class="d-flex justify-content-between mb-2"><span class="text-muted">Commission</span><strong>${formatMoney(booking.driverCommissionAmount)}</strong></div><div class="d-flex justify-content-between"><span class="text-muted">Driver Net Earning</span><strong class="text-success">${formatMoney(booking.driverNetEarning)}</strong></div></div></div><!-- Remarks --><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0">Remarks</h6></div><div class="card-body"><div class="text-muted booking-remarks">${booking.remarks ? dcEscape(booking.remarks).replace(/\n/g, "<br>") : "No remarks available."}</div></div></div><!-- Cancellation Reason --><div class="card shadow-sm mb-4"><div class="card-header bg-white"><h6 class="mb-0">Cancellation Date & Reason</h6></div><div class="card-body"><div class="text-muted booking-remarks">${booking.cancelledAt ? ("<b>Date: </b>" + formatBookingDateTime(booking.cancelledAt) + "</br>") : ""}${booking.cancellationReason ? dcEscape(booking.cancellationReason).replace(/\n/g, "<br>") : "No cancellation reason available."}</div></div></div>${canEdit ? `<div class="card shadow-sm border-danger"><div class="card-body"><h6 class="text-danger">Booking Actions</h6><p class="small text-muted">Cancel the booking while preserving its operational history.</p><button type="button" class="btn btn-outline-danger w-100" id="cancelBookingDetailsBtn"><i class="bi bi-x-circle me-1"></i>Cancel Booking</button></div></div>` : ""}</div></div>`;
 
     /*
      * Back
@@ -3030,3 +3163,12 @@ function removeGlobalAlert(alert) {
 // if (changePasswordBtn) {
 //   changePasswordBtn.addEventListener("click", () => { changePasswordForm(); });
 // }
+
+function getDriverAvailabilityClass(availability) {
+    const status = String(availability || "").toUpperCase();
+
+    if (status === "AVAILABLE") return "bg-success";
+    if (status === "BUSY") return "bg-warning text-dark";
+
+    return "bg-secondary";
+}
