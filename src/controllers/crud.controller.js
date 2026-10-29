@@ -50,7 +50,8 @@ function buildFilters(query, filterFields = {}) {
        * }
        */
       if(typeof config === "string") {
-        where[config] = value;  //where[queryKey] = value; 
+        where[queryKey] = value; 
+        //where[config] = value;  
         return;
       }
       /*
@@ -157,12 +158,12 @@ function createCrud(Model, options = {}) {
       const {search, page = 1, limit = defaultLimit, sortBy, sortOrder, ...cFilters} = req.query;  //console.log(req.query); console.log(search);
       const pagination = normalizePagination(page, limit, maxLimit);
       let where = {};
-      //let filterFields = cFilters;
+      let filterFields = cFilters;
 
       /*
        * Search
        */
-      const searchWhere = buildSearchWhere(search, searchFields); console.log(search); console.log(searchWhere);
+      const searchWhere = buildSearchWhere(search, searchFields); //console.log(search); console.log(searchWhere);
       if(searchWhere) {
         Object.assign(where, searchWhere);
       }
@@ -204,7 +205,7 @@ function createCrud(Model, options = {}) {
           findOptions = customOptions;
         }
       }
-      console.log(findOptions);
+      //console.log(findOptions);
       const result = await Model.findAndCountAll(findOptions);   //console.log(result);
       let response = {
         data: result.rows,
@@ -421,7 +422,7 @@ function createCrud(Model, options = {}) {
         }
         return res.status(404).json({message: `${modelName} not found.`});
       }
-      await row.update({isDeleted: 1}, transaction ? {transaction} : undefined);
+      await item.update({isDeleted: 1}, transaction ? {transaction} : undefined);
       if(transaction) {
         await transaction.commit();
       }

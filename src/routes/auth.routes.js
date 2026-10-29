@@ -55,7 +55,7 @@ const {authenticate} = require("../middleware/auth");
    */
 router.post("/login", controller.login);
 
-//router.get("/me",authenticate,controller.me);
+router.get("/me",authenticate,controller.me);
 
 //router.post("/change-password",authenticate,controller.changePassword);
 

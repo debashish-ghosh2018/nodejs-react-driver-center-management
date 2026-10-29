@@ -18,7 +18,8 @@ class Booking extends Model {
       returnTime: { type: DataTypes.TIME, allowNull: true }, 
       estimatedDistanceKm: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
       estimatedDays: { type: DataTypes.INTEGER, allowNull: true },
-      vehicleType: { type: DataTypes.STRING(100), allowNull: true },
+      vehicleType: { type: DataTypes.STRING(255), allowNull: true },
+      vehicleTypeId: {type: DataTypes.INTEGER.UNSIGNED, allowNull: true, references: {model: "vehicle_types", key: "id"}, onUpdate: "CASCADE", onDelete: "RESTRICT"},
       baseFare: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
       driverAllowance: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
       nightAllowance: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
@@ -34,6 +35,8 @@ class Booking extends Model {
       driverCommissionIncludeAllowances: {type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false},
       driverNetEarning: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
       status: { type: DataTypes.ENUM("PENDING", "CONFIRMED", "ASSIGNED", "ACCEPTED", "STARTED", "COMPLETED", "CANCELLED"), allowNull: false, defaultValue: "PENDING" },
+      cancelledAt: { type: DataTypes.DATE, allowNull: true },
+      cancellationReason: { type: DataTypes.TEXT, allowNull: true },
       remarks: { type: DataTypes.TEXT, allowNull: true }
     }, { sequelize, modelName: "Booking", tableName: "bookings", timestamps: true });
     return Booking;

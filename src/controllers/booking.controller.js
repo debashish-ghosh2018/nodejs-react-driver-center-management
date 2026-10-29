@@ -1,7 +1,204 @@
-const {sequelize, Booking, Customer, Driver, Vehicle, DriverEarning} = require("../models");
+"use strict";
+
+const {randomUUID} = require("crypto");
 const {Op} = require("sequelize");
+const {sequelize, Booking, Customer, Driver, Vehicle, VehicleType, DriverEarning} = require("../models");
 const {calculateFare, applyDefaultCommission, calculateCommission} = require("../services/commission.service");
 const {notifyBookingCreated, notifyDriverAssigned, notifyStatusChanged} = require("../services/bookingNotification.service");
+const { validateBookingVehicleType, httpError } = require("../services/vehicleType.service");
+const {getDriverAvailabilityClass} = require("../utils/driverUtils");
+
+
+/**
+ * Booking statuses.
+ * Adjust these values to match the ENUM
+ * defined in your existing Booking model.
+ */
+const STATUS = {PENDING: "PENDING", CONFIRMED: "CONFIRMED", ASSIGNED: "ASSIGNED", ACCEPTED: "ACCEPTED", STARTED: "STARTED", COMPLETED: "COMPLETED", CANCELLED: "CANCELLED"};
+const CLOSED_STATUSES = [STATUS.COMPLETED, STATUS.CANCELLED];
+const CUSTOMER_EDITABLE_STATUSES = [STATUS.PENDING, STATUS.CONFIRMED];
+const BOOKING_TYPES = ["ONE_WAY", "ROUND_TRIP", "HOURLY"];
+
+/**
+* Shared associations for booking responses.
+*/
+const bookingIncludes = [
+  {model: Customer, attributes: ["id", "name", "mobile", "email"]},
+  {model: Driver, attributes: ["id", "name", "mobile", "availability"], required: false},
+  {model: Vehicle, attributes: ["id", "vehicleNo", "vehicleTypeId", "brand", "model"], required: false},
+  {model: VehicleType, as: "selectedVehicleType", attributes: ["id", "code", "name", "description", "seatingCapacity", "baseFare", "perKmRate", "status"], required: false}
+];
+
+
+/**
+* Validate positive integer IDs.
+*/
+function parseId(value, fieldName, allowNull = false) {
+  if (allowNull && (value === null || value === "")) {
+    return null;
+  }
+
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw httpError(400, `${fieldName} must be a valid positive integer`);
+  }
+
+  return id;
+}
+
+// Not Required for now, but useful for future-proofing.
+function hasField(body, field) {
+  return Object.prototype.hasOwnProperty.call(body, field);
+}
+
+/**
+* Get customer profile associated with logged-in user. 
+* Not Required for now, but useful for future-proofing.
+*/
+async function getLoggedInCustomer(userId) {
+  const customer = await Customer.findOne({where: { userId }});
+  if (!customer) {
+    throw httpError(404, "Customer profile not found");
+  }
+
+  return customer;
+}
+
+/**
+* Validate vehicle type.
+*/
+async function validateVehicleType(vehicleTypeId, transaction) {
+  const id = parseId(vehicleTypeId, "vehicleTypeId");
+  const vehicleType = await VehicleType.findOne({ where: {id, status: "ACTIVE"}, transaction});
+
+  if (!vehicleType) {
+    throw httpError(400, "Selected vehicle type is invalid or inactive");
+  }
+
+  return vehicleType;
+}
+
+/**
+* Validate assigned driver. 
+* Not Required for now, but useful for future-proofing.
+*/
+async function validateDriver(driverId, transaction) {
+  if (driverId === null) {
+    return null;
+  }
+
+  const driver = await Driver.findByPk(driverId, {transaction});
+
+  if (!driver) {
+    throw httpError(404, "Selected driver not found");
+  }
+
+  if (driver.status !== "ACTIVE") {
+    throw httpError(409, "Selected driver is inactive");
+  }
+
+  if (driver.availability === "OFFLINE") {
+    throw httpError(409, "Selected driver is offline");
+  }
+
+  return driver;
+}
+
+/**
+* Validate assigned vehicle and requested vehicle type.
+*/
+async function validateVehicle(vehicleId, vehicleTypeId = null, transaction) {
+  if (vehicleId === null) {
+    return null;
+  }
+
+  const vehicle = await Vehicle.findByPk(vehicleId, { transaction });
+  if (!vehicle) {
+    throw httpError(404, "Selected vehicle not found");
+  }
+
+  if (vehicle.status !== "ACTIVE") {
+    throw httpError(409, "Selected vehicle is inactive");
+  }
+
+  if (vehicleTypeId !== null && Number(vehicle.vehicleTypeId) !== Number(vehicleTypeId)) {
+    throw httpError(409, "Selected vehicle does not match the requested vehicle type");
+  }
+
+  return vehicle;
+}
+
+/**
+* Validate booking details. Not Required for now, but useful for future-proofing.
+*/
+function validateBookingFields(data) {
+  if (!data.pickupLocation || !String(data.pickupLocation).trim()) {
+    throw httpError(400, "Pickup location is required");
+  }
+
+  if (!data.dropLocation || !String(data.dropLocation).trim()) {
+    throw httpError(400, "Drop location is required");
+  }
+
+  if (!data.pickupDate || !/^\d{4}-\d{2}-\d{2}$/.test(String(data.pickupDate))) {
+    throw httpError(400, "Valid pickup date is required");
+  }
+
+  if (!data.pickupTime || !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(String(data.pickupTime))) {
+    throw httpError(400, "Valid pickup time is required");
+  }
+
+  if (data.bookingType && !BOOKING_TYPES.includes(data.bookingType)) {
+    throw httpError(400, "Invalid booking type");
+  }
+}
+
+/**
+* Allow only permitted fields. 
+* Not Required for now, but useful for future-proofing.
+*/
+function extractBookingFields(body) {
+  const allowed = ["pickupLocation", "dropLocation", "pickupDate", "pickupTime", "bookingType", "remarks"];
+  const data = {};
+
+  for (const field of allowed) {
+    if (hasField(body, field)) {
+      data[field] = body[field];
+    }
+  }
+
+  return data;
+}
+
+/**
+* Resolve booking status from assignments. 
+* Not Required for now, but useful for future-proofing.
+*/
+function resolveAssignmentStatus(booking) {
+  if ([STATUS.ACCEPTED, STATUS.STARTED].includes(booking.status)) {
+    return booking.status;
+  }
+
+  if (booking.driverId !== null || booking.vehicleId !== null) {
+    return STATUS.ASSIGNED;
+  }
+
+  return STATUS.PENDING;
+}
+
+/**
+* Load booking with all related details. 
+* Not Required for now, but useful for future-proofing.
+*/
+async function getBookingDetails(id, where = {}) {
+  const booking = await Booking.findOne({where: {id, ...where}, include: bookingIncludes});
+
+  if (!booking) {
+    throw httpError(404, "Booking not found");
+  }
+
+  return booking;
+}
 
 /*
  * ============================================================
@@ -122,6 +319,11 @@ exports.list = async(req, res, next) => {
         }
       }];
     }
+
+    if (req.query.vehicleTypeId) {
+      where.vehicleTypeId = parseId(req.query.vehicleTypeId, "vehicleTypeId" );
+    }
+
     const currentPage = Math.max(parseInt(page, 10) || 1, 1);
     const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
     const offset = (currentPage - 1) * pageSize;
@@ -189,45 +391,59 @@ exports.get = async(req, res, next) => {
 exports.create = async(req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
+
+    //console.log("Creating booking with data:", req.body);
     const {
       customerId,
       tripCategory = "LOCAL",
-        bookingType = "ONE_WAY",
-        pickupLocation,
-        dropLocation,
-        pickupDate,
-        pickupTime,
-        returnDate,
-        returnTime,
-        estimatedDistanceKm,
-        estimatedDays,
-        vehicleType,
-        baseFare = 0,
-        driverAllowance = 0,
-        nightAllowance = 0,
-        tollCharges = 0,
-        parkingCharges = 0,
-        stateTax = 0,
-        otherCharges = 0,
-        discountAmount = 0,
-        remarks
+      bookingType = "ONE_WAY",
+      pickupLocation,
+      dropLocation,
+      pickupDate,
+      pickupTime,
+      returnDate,
+      returnTime,
+      estimatedDistanceKm,
+      estimatedDays,  //vehicleType, vehicleTypeId,
+      vehicleId,
+      baseFare = 0,
+      driverAllowance = 0,
+      nightAllowance = 0,
+      tollCharges = 0,
+      parkingCharges = 0,
+      stateTax = 0,
+      otherCharges = 0,
+      discountAmount = 0,
+      remarks
     } = req.body;
+
     if(!customerId || !pickupLocation || !dropLocation || !pickupDate || !pickupTime) {
       await transaction.rollback();
       return res.status(400).json({message: "Customer, pickup, drop, pickup date and pickup time are required"});
     }
+
     const customer = await Customer.findByPk(customerId, {transaction});
     if(!customer) {
       await transaction.rollback();
       return res.status(404).json({message: "Customer not found"});
     }
+    if (customer.status !== "ACTIVE") {
+      throw httpError(400, "Inactive customer");
+    }
+
     if(tripCategory === "OUTSTATION" && bookingType === "ROUND_TRIP" && !returnDate) {
       await transaction.rollback();
       return res.status(400).json({message: "Return date is required for an outstation round trip"});
     }
+
+    //await validateVehicleType(vehicleTypeId, transaction);
+    const vehicleDetails = await validateVehicle(vehicleId, null, transaction);
+    
     const bookingData = {
       bookingNo: generateBookingNo(),
       customerId,
+      vehicleId: vehicleId || null,
+      vehicleTypeId: vehicleDetails.vehicleTypeId || null,
       tripCategory,
       bookingType,
       pickupLocation,
@@ -238,7 +454,7 @@ exports.create = async(req, res, next) => {
       returnTime: returnTime || null,
       estimatedDistanceKm: estimatedDistanceKm || null,
       estimatedDays: estimatedDays || null,
-      vehicleType: vehicleType || null,
+      vehicleType: vehicleDetails.vehicleType || null,
       baseFare: numberValue(baseFare),
       driverAllowance: numberValue(driverAllowance),
       nightAllowance: numberValue(nightAllowance),
@@ -250,6 +466,7 @@ exports.create = async(req, res, next) => {
       remarks: remarks || null,
       status: "PENDING"
     };
+    //console.log("Booking data before fare calculation:", bookingData);
 
     /*
      * Fare
@@ -261,6 +478,8 @@ exports.create = async(req, res, next) => {
      * driver commission.
      */
     const dataWithCommission = await applyDefaultCommission(bookingData);
+    //console.log("Booking data after applying commission:", dataWithCommission);
+
     const booking = await Booking.create(dataWithCommission, {transaction});
     await transaction.commit();
     /*
@@ -290,36 +509,43 @@ exports.create = async(req, res, next) => {
  * Those use dedicated endpoints.
  */
 exports.update = async(req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
     const booking = await Booking.findByPk(req.params.id);
     if(!booking) {
+			await transaction.rollback();
       return res.status(404).json({message: "Booking not found"});
     }
+
     /*
      * Completed and cancelled
      * bookings shouldn't normally
      * be edited.
      */
-    if(
-      ["COMPLETED", "CANCELLED"].includes(booking.status)) {
+    if(["COMPLETED", "CANCELLED"].includes(booking.status)) {
+			await transaction.rollback();
       return res.status(409).json({message: "Completed or cancelled bookings cannot be edited"});
     }
-    const allowedFields = ["customerId", "tripCategory", "bookingType", "pickupLocation", "dropLocation", "pickupDate", "pickupTime", "returnDate", "returnTime", "estimatedDistanceKm", "estimatedDays", "vehicleType", "baseFare", "driverAllowance", "nightAllowance", "tollCharges", "parkingCharges", "stateTax", "otherCharges", "discountAmount", "remarks"];
+
+    const allowedFields = ["customerId", "tripCategory", "bookingType", "pickupLocation", "dropLocation", "pickupDate", "pickupTime", "returnDate", "returnTime", "estimatedDistanceKm", "estimatedDays", "vehicleType", "baseFare", "driverAllowance", "nightAllowance", "tollCharges", "parkingCharges", "stateTax", "otherCharges", "discountAmount", "remarks", "vehicleTypeId", "vehicleId"];
     const updateData = {};
     allowedFields.forEach(field => {
       if(Object.prototype.hasOwnProperty.call(req.body, field)) {
         updateData[field] = req.body[field];
       }
     });
+
     /*
      * Verify changed customer.
      */
     if(updateData.customerId) {
       const customer = await Customer.findByPk(updateData.customerId);
       if(!customer) {
+			  await transaction.rollback();
         return res.status(404).json({message: "Customer not found"});
       }
     }
+
     /*
      * If switched to LOCAL,
      * clear outstation fields.
@@ -329,6 +555,7 @@ exports.update = async(req, res, next) => {
       updateData.returnTime = null;
       updateData.estimatedDays = null;
     }
+
     /*
      * Validate outstation roundtrip.
      */
@@ -336,8 +563,10 @@ exports.update = async(req, res, next) => {
     const finalBookingType = updateData.bookingType ?? booking.bookingType;
     const finalReturnDate = Object.prototype.hasOwnProperty.call(updateData, "returnDate") ? updateData.returnDate : booking.returnDate;
     if(finalTripCategory === "OUTSTATION" && finalBookingType === "ROUND_TRIP" && !finalReturnDate) {
+			await transaction.rollback();
       return res.status(400).json({message: "Return date is required for an outstation round trip"});
     }
+
     /*
      * Build final values for
      * recalculation.
@@ -354,6 +583,7 @@ exports.update = async(req, res, next) => {
     };
     const fare = calculateFare(fareInput);
     updateData.fare = fare;
+
     /*
      * Existing booking keeps its
      * commission type/rate.
@@ -361,17 +591,25 @@ exports.update = async(req, res, next) => {
     const commission = calculateCommission({
       fare,
       baseFare: fareInput.baseFare,
-        driverAllowance: fareInput.driverAllowance,
-        nightAllowance: fareInput.nightAllowance,
-        type: booking.driverCommissionType,
-        rate: numberValue(booking.driverCommissionRate),
-        includeAllowances: Boolean(booking.driverCommissionIncludeAllowances)
+      driverAllowance: fareInput.driverAllowance,
+      nightAllowance: fareInput.nightAllowance,
+      type: booking.driverCommissionType,
+      rate: numberValue(booking.driverCommissionRate),
+      includeAllowances: Boolean(booking.driverCommissionIncludeAllowances)
     });
     updateData.driverCommissionAmount = commission.commissionAmount;
     updateData.driverNetEarning = commission.driverNetEarning;
-    await booking.update(updateData);
+
+    await validateVehicleType(updateData.vehicleTypeId, transaction);
+    const vehicleDetails = await validateVehicle(updateData.vehicleId, updateData.vehicleTypeId, transaction);
+    updateData.vehicleType = vehicleDetails.vehicleType || null;
+
+    await booking.update(updateData, {transaction});
+		await transaction.commit();
+
     return res.json({message: "Booking updated successfully", booking});
   } catch(error) {
+		await transaction.rollback();
     next(error);
   }
 };
@@ -576,7 +814,8 @@ exports.cancel = async(req, res, next) => {
       await transaction.rollback();
       return res.json({message: "Booking is already cancelled", booking});
     }
-    await booking.update({status: "CANCELLED", remarks: req.body.reason ? `${booking.remarks || ""}\nCancellation: ${req.body.reason}`.trim() : booking.remarks}, {transaction});
+    await booking.update({status: "CANCELLED", cancelledAt: new Date(), remarks: req.body.reason ? `${booking.remarks || ""}\nCancellation: ${req.body.reason}`.trim() : booking.remarks}, {transaction});
+    //await booking.update({status: "CANCELLED", cancellationReason: req.body.reason ? `${req.body.reason}`.trim() : "", cancelledAt: new Date()}, {transaction});
     if(booking.driverId) {
       await Driver.update({availability: "AVAILABLE"}, {where: {id: booking.driverId}, transaction});
     }
@@ -638,5 +877,33 @@ exports.updateBookingCommission = async(req, res, next) => {
     return res.json({message: "Driver commission updated successfully", booking});
   } catch(error) {
     next(error);
+  }
+};
+
+exports.getAvailableDrivers = async (req, res, next) => {
+  try {
+      const { Driver } = require("../models");
+
+      const drivers = await Driver.findAll({
+          attributes: [
+              "id",
+              "name",
+              "mobile",
+              "availability"
+          ]
+      });
+
+      const result = drivers.map(driver => {
+          const data = driver.toJSON();
+
+          return {
+              ...data,
+              availabilityClass: getDriverAvailabilityClass(data.availability)
+          };
+      });
+
+      res.json({success: true, data: result});
+  } catch (error) {
+      next(error);
   }
 };

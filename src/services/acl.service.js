@@ -68,6 +68,15 @@ const seed = [
   ["vehicles.delete","Delete vehicles","vehicles"],
   /*
    * =====================================================
+   * VEHICLE TYPES
+   * =====================================================
+   */
+  ["vehicle_types.view","View vehicle types","vehicle types"],
+  ["vehicle_types.create","Create vehicle types","vehicle types"],
+  ["vehicle_types.update","Update vehicle types","vehicle types"],
+  ["vehicle_types.delete","Delete vehicle types","vehicle types"],
+  /*
+   * =====================================================
    * BOOKINGS
    * =====================================================
    */

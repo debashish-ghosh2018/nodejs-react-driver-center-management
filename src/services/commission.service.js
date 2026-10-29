@@ -54,7 +54,7 @@ async function applyDefaultCommission(bookingData) {
   const fare = calculateFare(bookingData);
   const result = calculateCommission({fare,baseFare: bookingData.baseFare,driverAllowance: bookingData.driverAllowance,nightAllowance: bookingData.nightAllowance,type: config.type,rate: config.value,includeAllowances: config.includeAllowances});
 
-  return {fare,driverCommissionType: config.type,driverCommissionRate: config.value,driverCommissionAmount: result.commissionAmount,driverNetEarning: result.driverNetEarning};
+  return {...bookingData, fare,driverCommissionType: config.type,driverCommissionRate: config.value,driverCommissionAmount: result.commissionAmount,driverNetEarning: result.driverNetEarning};
 }
 
 module.exports = {calculateFare,calculateCommission,getDefaultCommission,applyDefaultCommission};

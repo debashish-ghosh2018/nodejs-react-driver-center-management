@@ -15,7 +15,7 @@ class Driver extends Model {
       userId: { type: DataTypes.INTEGER, allowNull: true, unique: true },
       status: { type: DataTypes.ENUM("ACTIVE", "INACTIVE", "SUSPENDED"), defaultValue: "ACTIVE" },
       availability: { type: DataTypes.ENUM("AVAILABLE", "BUSY", "OFFLINE"), defaultValue: "OFFLINE" },
-      isDeleted: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 }
+      isDeleted: { type: DataTypes.TINYINT(1).UNSIGNED, allowNull: false, defaultValue: 0 }
     }, { sequelize, modelName: "Driver", tableName: "drivers", timestamps: true });
     return Driver;
   }

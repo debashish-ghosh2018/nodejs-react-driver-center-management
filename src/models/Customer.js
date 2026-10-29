@@ -13,7 +13,7 @@ class Customer extends Model {
       state: DataTypes.STRING(80),
       pincode: DataTypes.STRING(10),
       status: { type: DataTypes.ENUM("ACTIVE", "INACTIVE"), defaultValue: "ACTIVE" },
-      isDeleted: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 }
+      isDeleted: { type: DataTypes.TINYINT(1).UNSIGNED, allowNull: false, defaultValue: 0 }
     }, { sequelize, modelName: "Customer", tableName: "customers", timestamps: true });
     return Customer;
   }

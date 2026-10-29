@@ -1,5 +1,5 @@
 const { Op, fn, col, literal } = require("sequelize");
-const { Customer, Driver, Vehicle, Booking, Payment } = require("../models");
+const { Customer, Driver, Vehicle, VehicleType, Booking, Payment } = require("../models");
 
 exports.index = async (req, res, next) => {
   try {
@@ -8,6 +8,7 @@ exports.index = async (req, res, next) => {
       drivers,
       availableDrivers,
       vehicles,
+      VehicleType,
       pendingBookings,
       activeBookings,
       completedBookings,
@@ -23,10 +24,8 @@ exports.index = async (req, res, next) => {
       Payment.sum("amount", { where: { paymentStatus: "PAID" } })
     ]);
 
-    res.json({
-      customers, drivers, availableDrivers, vehicles,
-      pendingBookings, activeBookings, completedBookings,
-      revenue: Number(revenue || 0)
-    });
-  } catch (e) { next(e); }
+    res.json({customers, drivers, availableDrivers, vehicles, pendingBookings, activeBookings, completedBookings,  revenue: Number(revenue || 0)});
+  } catch (e) { 
+    next(e); 
+  }
 };

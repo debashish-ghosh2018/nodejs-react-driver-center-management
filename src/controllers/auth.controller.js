@@ -22,6 +22,8 @@ exports.login = async (req, res, next) => {
 
 exports.login = async (req, res, next) => {
   try {
+    //console.log(req);
+
     const {email, password} = req.body;
     if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
 
@@ -51,5 +53,97 @@ exports.login = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+exports.me = async (req, res, next) => {
+  try {
+      const userId = req.user.id;
+
+      const user = await User.findByPk(userId, {
+          attributes: [
+              "id",
+              "name",
+              "email",
+              "role",
+              "status"
+          ]
+      });
+
+      if (!user) {
+          return res.status(404).json({
+              success: false,
+              message: "User not found"
+          });
+      }
+
+      const result = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status
+      };
+
+      // CUSTOMER profile
+      if (user.role === "CUSTOMER") {
+          const customer = await Customer.findOne({
+              where: {
+                  userId: user.id
+              },
+              attributes: [
+                  "id",
+                  "customerCode",
+                  "name",
+                  "mobile",
+                  "email",
+                  "address",
+                  "status"
+              ]
+          });
+
+          if (!customer) {
+              return res.status(404).json({
+                  success: false,
+                  message: "Customer profile not found"
+              });
+          }
+
+          result.customerProfile = customer;
+      }
+
+      // DRIVER profile
+      if (user.role === "DRIVER") {
+          const driver = await Driver.findOne({
+              where: {
+                  userId: user.id
+              },
+              attributes: [
+                  "id",
+                  "name",
+                  "mobile",
+                  "status",
+                  "availability"
+              ]
+          });
+
+          if (!driver) {
+              return res.status(404).json({
+                  success: false,
+                  message: "Driver profile not found"
+              });
+          }
+
+          result.driverProfile = driver;
+      }
+
+      return res.status(200).json({
+          success: true,
+          message: "Authenticated user retrieved successfully",
+          data: result
+      });
+
+  } catch (error) {
+      next(error);
   }
 };
